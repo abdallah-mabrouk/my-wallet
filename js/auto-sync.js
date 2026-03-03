@@ -6,18 +6,25 @@
 
 const SYNC_CONFIG = {
   autoSyncEnabled: true,           // المزامنة التلقائية مفعلة
-  syncInterval: 30000,              // كل 30 ثانية
-  syncOnChange: true,               // مزامنة فورية عند التغيير
-  syncOnLoad: true,                 // مزامنة عند التحميل
-  debounceDelay: 2000,              // انتظار 2 ثانية بعد آخر تغيير
-  maxRetries: 3,                    // محاولات إعادة المحاولة
-  showSyncStatus: true              // إظهار حالة المزامنة
+  syncOnChange: true,              // ✅ مزامنة فورية عند التغيير فقط
+  syncOnLoad: true,                // ✅ مزامنة عند التحميل فقط
+  debounceDelay: 3000,             // انتظار 3 ثوان لتجميع التغييرات
+  maxRetries: 3,                   // محاولات إعادة المحاولة
+  showSyncStatus: true,            // إظهار حالة المزامنة
+  
+  // ✅ التحقق الذكي حسب حالة التبويب
+  checkIntervalActive: 30000,      // 30 ثانية عند الاستخدام النشط
+  checkIntervalIdle: 300000        // 5 دقائق عند الخمول
 };
 
 let syncTimer = null;
 let debounceTimer = null;
+let checkTimer = null;
 let lastSyncTime = null;
+let lastLocalChange = null;
 let isSyncing = false;
+let hasLocalChanges = false;
+let isTabActive = true;  // ✅ تتبع حالة التبويب
 
 // ======================
 // المزامنة الذكية
@@ -29,6 +36,10 @@ function smartSync() {
     return;
   }
   
+  // تعليم أن هناك تغييرات محلية
+  hasLocalChanges = true;
+  lastLocalChange = new Date();
+  
   // إلغاء المؤقت السابق
   if (debounceTimer) {
     clearTimeout(debounceTimer);
@@ -36,12 +47,45 @@ function smartSync() {
   
   // انتظار قليلاً لتجميع التغييرات
   debounceTimer = setTimeout(() => {
-    performSync('auto');
+    if (hasLocalChanges) {
+      performUpload();  // ✅ رفع فقط، بدون تحميل!
+      hasLocalChanges = false;
+    }
   }, SYNC_CONFIG.debounceDelay);
 }
 
 // ======================
-// تنفيذ المزامنة
+// رفع فقط (بدون تحميل)
+// ======================
+
+async function performUpload() {
+  if (isSyncing) {
+    console.log('⏳ رفع قيد التنفيذ...');
+    return;
+  }
+  
+  isSyncing = true;
+  updateSyncStatus('syncing');
+  
+  try {
+    await uploadToGoogleSheets();
+    
+    lastSyncTime = new Date();
+    localStorage.setItem('mahfazaty_last_sync', lastSyncTime.toISOString());
+    
+    updateSyncStatus('success');
+    console.log(`✅ تم الرفع في ${lastSyncTime.toLocaleTimeString()}`);
+    
+  } catch (error) {
+    console.error('❌ فشل الرفع:', error);
+    updateSyncStatus('error');
+  } finally {
+    isSyncing = false;
+  }
+}
+
+// ======================
+// تنفيذ المزامنة الكاملة (رفع + تحميل)
 // ======================
 
 async function performSync(source = 'manual') {
@@ -61,10 +105,11 @@ async function performSync(source = 'manual') {
     await downloadFromGoogleSheets();
     
     lastSyncTime = new Date();
+    hasLocalChanges = false;
     localStorage.setItem('mahfazaty_last_sync', lastSyncTime.toISOString());
     
     updateSyncStatus('success');
-    console.log(`✅ مزامنة ناجحة (${source}) في ${lastSyncTime.toLocaleTimeString()}`);
+    console.log(`✅ مزامنة كاملة (${source}) في ${lastSyncTime.toLocaleTimeString()}`);
     
   } catch (error) {
     console.error('❌ فشلت المزامنة:', error);
@@ -252,27 +297,28 @@ function updateSyncStatus(status) {
 }
 
 // ======================
-// بدء المزامنة الدورية
+// بدء المزامنة التلقائية
 // ======================
 
 function startAutoSync() {
   if (!SYNC_CONFIG.autoSyncEnabled) return;
   
-  console.log('🚀 بدء المزامنة التلقائية...');
+  console.log('🚀 بدء المزامنة الذكية...');
   
-  // مزامنة عند التحميل
+  // مزامنة كاملة عند التحميل (مرة واحدة فقط)
   if (SYNC_CONFIG.syncOnLoad) {
     setTimeout(() => {
       performSync('initial');
     }, 2000);
   }
   
-  // مزامنة دورية
-  if (SYNC_CONFIG.syncInterval > 0) {
-    syncTimer = setInterval(() => {
-      performSync('periodic');
-    }, SYNC_CONFIG.syncInterval);
-  }
+  // ✅ بدء التحقق الذكي
+  startSmartChecking();
+  
+  console.log('✅ المزامنة التلقائية تعمل:');
+  console.log('   - رفع فوري عند التغيير');
+  console.log('   - تحميل عند الفتح');
+  console.log('   - تحقق كل 30 ثانية (نشط) / 5 دقائق (خامل)');
 }
 
 function stopAutoSync() {
@@ -286,7 +332,100 @@ function stopAutoSync() {
     debounceTimer = null;
   }
   
+  if (checkTimer) {
+    clearInterval(checkTimer);
+    checkTimer = null;
+  }
+  
   console.log('⏸️ تم إيقاف المزامنة التلقائية');
+}
+
+// ======================
+// التحقق الذكي حسب حالة التبويب
+// ======================
+
+function startSmartChecking() {
+  // إيقاف أي timer موجود
+  if (checkTimer) {
+    clearInterval(checkTimer);
+  }
+  
+  // بدء التحقق حسب الحالة
+  const interval = isTabActive ? SYNC_CONFIG.checkIntervalActive : SYNC_CONFIG.checkIntervalIdle;
+  
+  checkTimer = setInterval(() => {
+    checkForUpdates();
+  }, interval);
+  
+  console.log(`🔄 التحقق كل ${interval / 1000} ثانية (${isTabActive ? 'نشط' : 'خامل'})`);
+}
+
+// ======================
+// Visibility API - مراقبة حالة التبويب
+// ======================
+
+document.addEventListener('visibilitychange', () => {
+  const wasActive = isTabActive;
+  isTabActive = !document.hidden;
+  
+  if (isTabActive && !wasActive) {
+    // ✅ عودة للتبويب - مزامنة فورية!
+    console.log('👁️ عدت للتبويب - مزامنة فورية...');
+    performSync('tab-visible');
+    
+    // تغيير التحقق لـ 30 ثانية
+    startSmartChecking();
+  } else if (!isTabActive && wasActive) {
+    // التبويب أصبح خامل - تبطيء التحقق
+    console.log('😴 التبويب خامل - تبطيء المزامنة...');
+    startSmartChecking();
+  }
+});
+
+// عند التركيز على النافذة
+window.addEventListener('focus', () => {
+  if (isTabActive) {
+    console.log('🎯 تركيز على النافذة - تحقق من التحديثات...');
+    checkForUpdates();
+  }
+});
+
+// ======================
+// التحقق الخفيف من التحديثات
+// ======================
+
+async function checkForUpdates() {
+  // تحقق خفيف جداً - فقط مقارنة timestamp
+  if (!APP.gasUrl || APP.gasUrl.trim() === '' || isSyncing) {
+    return;
+  }
+  
+  try {
+    // طلب خفيف جداً - فقط timestamp
+    const response = await fetch(APP.gasUrl + '?action=check', {
+      method: 'GET',
+      mode: 'cors'
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      
+      if (data && data.timestamp) {
+        const cloudTime = new Date(data.timestamp);
+        const localTime = lastLocalChange || lastSyncTime || new Date(0);
+        
+        // إذا كانت السحابة أحدث، حمّل التحديثات
+        if (cloudTime > localTime) {
+          console.log('📥 وُجدت تحديثات من جهاز آخر');
+          await downloadFromGoogleSheets();
+          renderAll();
+        }
+      }
+    }
+  } catch (error) {
+    // فشل صامت - لا مشكلة
+    console.debug('تعذر التحقق من التحديثات:', error);
+  }
 }
 
 // ======================
