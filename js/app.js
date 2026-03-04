@@ -43,7 +43,7 @@ function formatMoney(amount) {
 
 function save() {
   localStorage.setItem('mahfazaty_data', JSON.stringify(APP));
-  syncToGoogleSheets();
+  // ❌ لا مزامنة تلقائية - يدوية فقط
 }
 
 function load() {
