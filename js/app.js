@@ -827,3 +827,37 @@ async function importFromGoogleSheets() {
 }
 
 console.log('✅ Google Sheets import function loaded');
+
+// ======================
+// تتبع التغييرات غير المحفوظة
+// ======================
+
+let hasUnsavedChanges = false;
+
+// تعليم وجود تغييرات عند الحفظ المحلي
+const _originalSave = save;
+window.save = function() {
+  _originalSave();
+  hasUnsavedChanges = true;
+};
+
+// إعادة تعيين عند الرفع للسحابة
+if (typeof manualUpload !== 'undefined') {
+  const _originalUpload = manualUpload;
+  window.manualUpload = async function() {
+    await _originalUpload();
+    hasUnsavedChanges = false;
+  };
+}
+
+// تنبيه عند الإغلاق بدون حفظ
+window.addEventListener('beforeunload', (e) => {
+  if (hasUnsavedChanges && APP.gasUrl && APP.gasUrl.trim() !== '') {
+    const message = '⚠️ لديك تغييرات غير محفوظة!\n\nاضغط [📤 حفظ] قبل المغادرة.';
+    e.preventDefault();
+    e.returnValue = message;
+    return message;
+  }
+});
+
+console.log('✅ نظام التنبيه قبل الإغلاق جاهز');
