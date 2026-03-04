@@ -372,6 +372,7 @@ function renderInvestment() {
   const total = activeAssets.reduce((s, a) => s + a.currentValue, 0);
   const capital = activeAssets.reduce((s, a) => s + a.cost, 0);
   const profit = total - capital;
+  const profitPct = capital > 0 ? ((profit / capital) * 100).toFixed(1) : 0;
   const fund = APP.goals.filter(g => g.category === 'investment' && g.status === 'active').reduce((s, g) => s + g.saved, 0);
   
   document.getElementById('invest-total').textContent = formatMoney(total);
@@ -379,6 +380,13 @@ function renderInvestment() {
   document.getElementById('invest-profit').textContent = `${profit >= 0 ? '+' : ''}${formatMoney(profit)}`;
   document.getElementById('invest-profit').style.color = profit >= 0 ? 'var(--green)' : 'var(--red)';
   document.getElementById('invest-fund').textContent = formatMoney(fund);
+  
+  // ✅ إضافة كارت نسبة النمو
+  const profitCard = document.getElementById('invest-profit-pct');
+  if (profitCard) {
+    profitCard.textContent = `${profit >= 0 ? '+' : ''}${profitPct}%`;
+    profitCard.style.color = profit >= 0 ? 'var(--green)' : 'var(--red)';
+  }
   
   let html = '';
   if (APP.assets.length === 0) {
