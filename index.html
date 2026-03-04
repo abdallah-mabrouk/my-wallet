@@ -44,7 +44,9 @@
 <div class="topbar">
 <h2 id="page-title">📊 لوحة التحكم</h2>
 <div class="topbar-actions">
-<div id="sync-status" class="sync-status idle" style="margin-left:15px;font-size:13px;color:var(--text2)">☁️ جاهز</div>
+<div id="sync-status" class="sync-status idle" style="margin-left:15px;font-size:13px;color:var(--text2)">💾 يدوي</div>
+<button class="btn btn-secondary btn-small" onclick="importFromGoogleSheets()" title="تحميل من السحابة">📥 تحميل</button>
+<button class="btn btn-primary btn-small" onclick="manualUpload()" title="رفع للسحابة">📤 حفظ</button>
 <button class="btn btn-primary btn-small" onclick="om('mInc')">💵 إضافة دخل</button>
 <button class="btn btn-primary btn-small" onclick="om('mExp')">💸 إضافة مصروف</button>
 </div>
@@ -149,32 +151,25 @@
 <input type="text" class="form-input" id="settings-gas" placeholder="اختياري">
 </div>
 
-<div style="margin:15px 0;padding:15px;background:var(--bg2);border-radius:10px">
-<h4 style="margin-bottom:15px;color:var(--accent)">🔄 المزامنة التلقائية</h4>
-<label class="form-checkbox">
-<input type="checkbox" id="auto-sync-toggle" checked onchange="toggleAutoSync(this.checked)">
-<span>تفعيل المزامنة التلقائية بين الأجهزة</span>
-</label>
-<div style="margin-top:10px;font-size:13px;color:var(--text2)">
-<div>• تُرفع البيانات تلقائياً عند كل تغيير</div>
-<div>• تُحمّل آخر التحديثات كل 30 ثانية</div>
-<div>• تعمل بين جميع أجهزتك المتصلة</div>
-</div>
-</div>
+<button class="btn btn-primary" onclick="saveSettings()">💾 حفظ الرابط</button>
 
-<button class="btn btn-primary" onclick="saveSettings()">💾 حفظ</button>
-
-<div style="margin-top:15px;padding:15px;background:var(--bg2);border-radius:10px">
-<h4 style="margin-bottom:10px;color:var(--accent)">☁️ المزامنة مع Google Sheets</h4>
-<button class="btn btn-primary" onclick="performSync('manual');toast('جاري المزامنة...','info')" style="width:100%;margin-bottom:10px">🔄 مزامنة الآن</button>
-<button class="btn btn-secondary" onclick="syncToGoogleSheets();toast('تم إرسال البيانات','success')" style="width:100%;margin-bottom:10px">📤 رفع البيانات المحلية</button>
-<button class="btn btn-secondary" onclick="importFromGoogleSheets()" style="width:100%">📥 استيراد من Google Sheets</button>
+<div style="margin-top:20px;padding:15px;background:var(--bg2);border-radius:10px;border:2px solid var(--accent)">
+<h4 style="margin-bottom:15px;color:var(--accent)">☁️ المزامنة اليدوية</h4>
+<p style="font-size:13px;color:var(--text2);margin-bottom:15px">
+⚠️ <strong>مهم:</strong> المزامنة يدوية فقط لتجنب فقدان البيانات<br>
+• اضغط "رفع" بعد كل جلسة عمل<br>
+• اضغط "تحميل" عند فتح جهاز جديد<br>
+• اضغط "مزامنة كاملة" للتأكد من التطابق
+</p>
+<button class="btn btn-primary" onclick="manualUpload()" style="width:100%;margin-bottom:10px">📤 رفع البيانات المحلية</button>
+<button class="btn btn-secondary" onclick="importFromGoogleSheets()" style="width:100%;margin-bottom:10px">📥 تحميل من Google Sheets</button>
+<button class="btn btn-primary" onclick="performSync('manual')" style="width:100%;background:var(--green)">🔄 مزامنة كاملة (رفع + تحميل)</button>
 </div>
 
 <div style="margin-top:15px;padding:15px;background:var(--bg2);border-radius:10px">
 <h4 style="margin-bottom:10px;color:var(--accent)">💾 النسخ الاحتياطي المحلي</h4>
-<button class="btn btn-secondary" onclick="exportData()" style="width:100%;margin-bottom:10px">📥 تصدير نسخة احتياطية</button>
-<button class="btn btn-secondary" onclick="importData()" style="width:100%">📤 استيراد من ملف</button>
+<button class="btn btn-secondary" onclick="exportData()" style="width:100%;margin-bottom:10px">📥 تصدير نسخة احتياطية (JSON)</button>
+<button class="btn btn-secondary" onclick="importData()" style="width:100%">📤 استيراد من ملف محلي</button>
 </div>
 
 <button class="btn btn-secondary" style="background:var(--red);color:#fff;border:none;margin-top:15px;width:100%" onclick="resetData()">🗑 مسح كل البيانات</button>
