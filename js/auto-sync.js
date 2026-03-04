@@ -1,66 +1,41 @@
 /* 💰 محفظتي v5 - نظام المزامنة التلقائية */
 
 // ======================
-// إعدادات المزامنة
+// إعدادات المزامنة - يدوية فقط
 // ======================
 
 const SYNC_CONFIG = {
-  autoSyncEnabled: true,           // المزامنة التلقائية مفعلة
-  syncOnChange: true,              // ✅ مزامنة فورية عند التغيير فقط
-  syncOnLoad: true,                // ✅ مزامنة عند التحميل فقط
-  debounceDelay: 3000,             // انتظار 3 ثوان لتجميع التغييرات
-  maxRetries: 3,                   // محاولات إعادة المحاولة
-  showSyncStatus: true,            // إظهار حالة المزامنة
-  
-  // ✅ التحقق الذكي حسب حالة التبويب
-  checkIntervalActive: 30000,      // 30 ثانية عند الاستخدام النشط
-  checkIntervalIdle: 300000        // 5 دقائق عند الخمول
+  autoSyncEnabled: false,          // ❌ تعطيل المزامنة التلقائية نهائياً
+  syncOnChange: false,             // ❌ لا مزامنة تلقائية عند التعديل
+  syncOnLoad: false,               // ❌ لا مزامنة تلقائية عند الفتح
+  showSyncStatus: true,            // ✅ إظهار حالة المزامنة
+  manualOnly: true                 // ✅ يدوية فقط عبر الأزرار
 };
 
-let syncTimer = null;
-let debounceTimer = null;
-let checkTimer = null;
-let lastSyncTime = null;
-let lastLocalChange = null;
 let isSyncing = false;
-let hasLocalChanges = false;
-let isTabActive = true;  // ✅ تتبع حالة التبويب
+let lastSyncTime = null;
 
 // ======================
-// المزامنة الذكية
+// المزامنة - معطلة تلقائياً
 // ======================
 
 function smartSync() {
-  // إلغاء المزامنة إذا كانت معطلة أو لا يوجد رابط
-  if (!SYNC_CONFIG.autoSyncEnabled || !APP.gasUrl || APP.gasUrl.trim() === '') {
-    return;
-  }
-  
-  // تعليم أن هناك تغييرات محلية
-  hasLocalChanges = true;
-  lastLocalChange = new Date();
-  
-  // إلغاء المؤقت السابق
-  if (debounceTimer) {
-    clearTimeout(debounceTimer);
-  }
-  
-  // انتظار قليلاً لتجميع التغييرات
-  debounceTimer = setTimeout(() => {
-    if (hasLocalChanges) {
-      performUpload();  // ✅ رفع فقط، بدون تحميل!
-      hasLocalChanges = false;
-    }
-  }, SYNC_CONFIG.debounceDelay);
+  // ❌ معطلة - لا مزامنة تلقائية
+  return;
 }
 
 // ======================
-// رفع فقط (بدون تحميل)
+// رفع يدوي للسحابة
 // ======================
 
-async function performUpload() {
+async function manualUpload() {
+  if (!APP.gasUrl || APP.gasUrl.trim() === '') {
+    toast('الرجاء ربط Google Sheets أولاً', 'error');
+    return;
+  }
+  
   if (isSyncing) {
-    console.log('⏳ رفع قيد التنفيذ...');
+    toast('عملية جارية...', 'info');
     return;
   }
   
@@ -74,23 +49,38 @@ async function performUpload() {
     localStorage.setItem('mahfazaty_last_sync', lastSyncTime.toISOString());
     
     updateSyncStatus('success');
+    toast('✅ تم رفع البيانات بنجاح', 'success');
     console.log(`✅ تم الرفع في ${lastSyncTime.toLocaleTimeString()}`);
     
   } catch (error) {
     console.error('❌ فشل الرفع:', error);
     updateSyncStatus('error');
+    toast('❌ فشل الرفع - تحقق من الاتصال', 'error');
   } finally {
     isSyncing = false;
   }
 }
 
 // ======================
-// تنفيذ المزامنة الكاملة (رفع + تحميل)
+// مزامنة كاملة يدوية (رفع + تحميل)
 // ======================
 
 async function performSync(source = 'manual') {
+  if (!APP.gasUrl || APP.gasUrl.trim() === '') {
+    toast('الرجاء ربط Google Sheets أولاً', 'error');
+    return;
+  }
+  
   if (isSyncing) {
-    console.log('⏳ مزامنة قيد التنفيذ بالفعل...');
+    toast('عملية جارية...', 'info');
+    return;
+  }
+  
+  const confirmMsg = source === 'manual' ? 
+    'هل تريد المزامنة الكاملة؟\n\n⚠️ سيتم:\n• رفع بياناتك المحلية\n• تحميل البيانات من السحابة\n• دمج البيانات' :
+    null;
+  
+  if (source === 'manual' && !confirm(confirmMsg)) {
     return;
   }
   
@@ -98,22 +88,29 @@ async function performSync(source = 'manual') {
   updateSyncStatus('syncing');
   
   try {
-    // 1️⃣ رفع البيانات المحلية
+    // 1️⃣ رفع البيانات المحلية أولاً
+    toast('📤 جاري رفع البيانات...', 'info');
     await uploadToGoogleSheets();
     
+    // انتظار قصير لضمان الحفظ
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
     // 2️⃣ تحميل أحدث البيانات
+    toast('📥 جاري تحميل البيانات...', 'info');
     await downloadFromGoogleSheets();
     
     lastSyncTime = new Date();
-    hasLocalChanges = false;
     localStorage.setItem('mahfazaty_last_sync', lastSyncTime.toISOString());
     
     updateSyncStatus('success');
-    console.log(`✅ مزامنة كاملة (${source}) في ${lastSyncTime.toLocaleTimeString()}`);
+    renderAll();
+    toast('✅ تمت المزامنة بنجاح!', 'success');
+    console.log(`✅ مزامنة كاملة في ${lastSyncTime.toLocaleTimeString()}`);
     
   } catch (error) {
     console.error('❌ فشلت المزامنة:', error);
     updateSyncStatus('error');
+    toast('❌ فشلت المزامنة - تحقق من الاتصال', 'error');
   } finally {
     isSyncing = false;
   }
@@ -148,7 +145,7 @@ async function uploadToGoogleSheets() {
 }
 
 // ======================
-// تحميل من السحابة
+// تحميل من السحابة (استبدال كامل)
 // ======================
 
 async function downloadFromGoogleSheets() {
@@ -167,85 +164,40 @@ async function downloadFromGoogleSheets() {
     const cloudData = await response.json();
     
     if (cloudData && cloudData.txs) {
-      // دمج ذكي: آخر تعديل يفوز
-      mergeData(cloudData);
+      // ✅ استبدال كامل بدون دمج (تجنب التعارضات)
+      APP.txs = cloudData.txs || [];
+      APP.goals = cloudData.goals || [];
+      APP.assets = cloudData.assets || [];
+      APP.people = cloudData.people || [];
       
-      // حفظ محلياً بدون تشغيل مزامنة (لتجنب اللوب)
+      if (cloudData.settings) {
+        APP.settings = Object.assign(APP.settings, cloudData.settings);
+      }
+      
+      // حفظ محلياً
       localStorage.setItem('mahfazaty_data', JSON.stringify(APP));
       
-      console.log('📥 تم تحميل البيانات');
+      console.log('📥 تم تحميل البيانات (استبدال كامل)');
+    } else {
+      console.log('⚠️ لا توجد بيانات في Google Sheets');
     }
   } catch (error) {
-    console.warn('⚠️ تعذر تحميل البيانات من السحابة:', error);
+    console.error('❌ تعذر تحميل البيانات:', error);
+    throw error;
   }
 }
 
 // ======================
-// دمج البيانات الذكي
+// بدء/إيقاف المزامنة (معطلة)
 // ======================
 
-function mergeData(cloudData) {
-  // استراتيجية: آخر تعديل يفوز (Last Write Wins)
-  
-  // دمج المعاملات
-  const localTxIds = new Set(APP.txs.map(t => t.id));
-  const cloudTxIds = new Set(cloudData.txs.map(t => t.id));
-  
-  // إضافة المعاملات الجديدة من السحابة
-  cloudData.txs.forEach(cloudTx => {
-    if (!localTxIds.has(cloudTx.id)) {
-      APP.txs.push(cloudTx);
-    }
-  });
-  
-  // حذف المعاملات المحذوفة (موجودة محلياً لكن مش في السحابة)
-  APP.txs = APP.txs.filter(tx => cloudTxIds.has(tx.id));
-  
-  // نفس الشيء للأهداف
-  const localGoalIds = new Set(APP.goals.map(g => g.id));
-  const cloudGoalIds = new Set(cloudData.goals.map(g => g.id));
-  
-  cloudData.goals.forEach(cloudGoal => {
-    const localGoal = APP.goals.find(g => g.id === cloudGoal.id);
-    if (!localGoal) {
-      APP.goals.push(cloudGoal);
-    } else {
-      // تحديث إذا كانت السحابة أحدث
-      Object.assign(localGoal, cloudGoal);
-    }
-  });
-  
-  APP.goals = APP.goals.filter(g => cloudGoalIds.has(g.id));
-  
-  // الأصول
-  const localAssetIds = new Set(APP.assets.map(a => a.id));
-  const cloudAssetIds = new Set(cloudData.assets.map(a => a.id));
-  
-  cloudData.assets.forEach(cloudAsset => {
-    const localAsset = APP.assets.find(a => a.id === cloudAsset.id);
-    if (!localAsset) {
-      APP.assets.push(cloudAsset);
-    } else {
-      Object.assign(localAsset, cloudAsset);
-    }
-  });
-  
-  APP.assets = APP.assets.filter(a => cloudAssetIds.has(a.id));
-  
-  // الأشخاص
-  const localPeopleIds = new Set(APP.people.map(p => p.id));
-  const cloudPeopleIds = new Set(cloudData.people.map(p => p.id));
-  
-  cloudData.people.forEach(cloudPerson => {
-    const localPerson = APP.people.find(p => p.id === cloudPerson.id);
-    if (!localPerson) {
-      APP.people.push(cloudPerson);
-    } else {
-      Object.assign(localPerson, cloudPerson);
-    }
-  });
-  
-  APP.people = APP.people.filter(p => cloudPeopleIds.has(p.id));
+function startAutoSync() {
+  // ❌ المزامنة التلقائية معطلة
+  console.log('ℹ️ المزامنة اليدوية فقط - استخدم الأزرار في الإعدادات');
+}
+
+function stopAutoSync() {
+  // لا شيء - معطلة أصلاً
 }
 
 // ======================
@@ -498,3 +450,36 @@ window.addEventListener('load', () => {
 });
 
 console.log('✅ دوال التحكم في المزامنة جاهزة');
+
+// ======================
+// حالة المزامنة في الواجهة
+// ======================
+
+function updateSyncStatus(status) {
+  const statusDiv = document.getElementById('sync-status');
+  if (!statusDiv) return;
+  
+  const icons = {
+    syncing: '🔄',
+    success: '✅',
+    error: '❌',
+    idle: '💾'
+  };
+  
+  const messages = {
+    syncing: 'جاري المزامنة...',
+    success: 'تمت المزامنة',
+    error: 'فشلت المزامنة',
+    idle: 'يدوي'
+  };
+  
+  statusDiv.innerHTML = `${icons[status]} ${messages[status]}`;
+  
+  if (status === 'success' || status === 'error') {
+    setTimeout(() => {
+      statusDiv.innerHTML = `${icons.idle} ${messages.idle}`;
+    }, 3000);
+  }
+}
+
+console.log('✅ نظام المزامنة اليدوية جاهز');
